@@ -12,6 +12,7 @@
 (require "package://pr2eus/pr2.l")
 (require "package://pr2eus/pr2-utils.l")
 (require "package://pr2eus/pr2-interface.l") 
+(load "models/arrow-object.l")
 
 
 ;;Making PR2 object
@@ -19,8 +20,8 @@
 
 
 ;;Setting cube as a desk for surgery. 
-(setq *desk* (make-cube 500 500 600))
-(send *desk* :translate (float-vector 700 0 350)) ;; 質問：世界座標の原点がわからないので，机を床に設置(接地)できない．
+(setq *desk* (make-cube 500 500 650))
+(send *desk* :translate (float-vector 700 0 325)) 
 (send *desk* :set-color :brown)
 ;[memo] (send *desk* :translate (float-vector 500 0 80)) ;;CAUTION!!(by Michi-Tsubaki)<-parameter that make robot motion NOT converge
 
@@ -32,28 +33,35 @@
 (send *needle* :rotate #d90 :x)
 
 
-;;Setting hampen
+;;Set hampen
 (setq *hampen* (make-cube 60 60 20))
-(send *hampen* :translate (float-vector 700 0 660)) ; 質問：座標じゃなくてdeskの上面に設置させたい
+(send *hampen* :translate (float-vector 700 0 660)) 
+;(send *hampen* :translate (v+ (float-vector 0 0 310) (send *desk* :pos))
 (send *hampen* :set-color :white)
 
-;;Setting coordination.
+;;Set coordination.
 (send *desk* :put :left-coords
       (make-cascoords
        :coords (send (send *desk* :copy-worldcoords) :translate (float-vector 0 0 500))
        :parent *desk*))
-;;Setting coordination.
+;;Set coordination.
 (send *needle* :put :left-coords
       (make-cascoords
        :coords (send (send *needle* :copy-worldcoords) :translate (float-vector 0 0 -5))
-       :parent *needle*)) ;;質問：parent座標をpr2に設定したら収束しなくなった
+       :parent *needle*)) ;;質問：parent座標をpr2に設定したら収束しなくなった ;;still confusing 
 
 (send *pr2* :larm :inverse-kinematics
       (send (send *needle* :get :left-coords) :copy-worldcoords)
       :rotation-axis :z)
 
+
+;;Show Worldrecord
+(setq *arrow* (arrow))
+(send *arrow* :copy-worldcoords)
+
 ;;Show all objects in viewer. 
 (objects (list *pr2* *desk* *needle* *hampen*)) ;;Dont forget to add all items
+
 
 
 ;Setting Initial Pose
@@ -80,7 +88,7 @@
 ;(unix:sleep 1)
 
 
-;;Grasping needle
+;;Graspe needle
 ;;1. Reach
 (send *pr2* :larm :inverse-kinematics
       (send (send *needle* :get :left-coords) :copy-worldcoords)
@@ -100,7 +108,7 @@
 
 
 
-;;Stitching with the left hand
+;;Stitch with the left hand
 (send *pr2*
       :inverse-kinematics (send (send (send *needle* :get :left-coords) :copy-worldcoords)
                                       :translate (float-vector 0.0 -10.0 -10.0))
@@ -188,15 +196,50 @@
 ;(unix:sleep 1)
 
 
+(send *ri* :stop-grasp :rarm)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
 
 
-
-;;質問：ここでikが上手く行かなくなった。左では上手く行っているのに、右では下からアプローチする。assocの切り替えもわからない。あと，オフセット
 ;;Grasping needle with right hand
 (send *pr2* :rarm :inverse-kinematics
       (send (send *needle* :get :left-coords) :copy-worldcoords)
-      :rotation-axis :z)
+      :rotation-axis :y) ;;yだと向きが違う ;;naiveに少しずつ変えるべき
+(send (send *needle* :parent) :dissoc *needle*)
 (send *pr2* :rarm :end-coords :assoc *needle*)
 (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
+
+
+
+(send *ri* :start-grasp :rarm)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
+
+
+(send *pr2* :larm :inverse-kinematics
+      (send (send *desk* :get :left-coords) :copy-worldcoords)
+      :rotation-axis :z)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
+
+(send *pr2* :rarm :inverse-kinematics
+      (send (send *desk* :get :left-coords) :copy-worldcoords)
+      :rotation-axis :z)
+(send (send *needle* :parent) :dissoc *needle*)
+(send *pr2* :rarm :end-coords :assoc *needle*)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
+
+
+
+
+
+;;how to dwaw coordination arrow
+;(send (send (send *needle* :get :left-coords) :copy-worldcoords) :draw-on :flush t)
+
