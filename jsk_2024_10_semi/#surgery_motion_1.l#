@@ -210,8 +210,8 @@
 ;(send *pr2* :rarm :inverse-kinematics
 ;      (send (send *needle* :get :left-coords) :copy-worldcoords)
 ;      :rotation-axis :y) ;;yだと向きが違う ;;naiveに少しずつ変えるべき
-;(send (send *needle* :parent) :dissoc *needle*)
-;(send *pr2* :rarm :end-coords :assoc *needle*)
+(send (send *needle* :parent) :dissoc *needle*)
+(send *pr2* :rarm :end-coords :assoc *needle*)
 (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
