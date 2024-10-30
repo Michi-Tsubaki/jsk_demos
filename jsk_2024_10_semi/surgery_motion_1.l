@@ -209,35 +209,38 @@
        )
 ;(send *pr2* :rarm :inverse-kinematics
 ;      (send (send *needle* :get :left-coords) :copy-worldcoords)
-;      :rotation-axis :y) ;;yだと向きが違う ;;naiveに少しずつ変えるべき
-;(send (send *needle* :parent) :dissoc *needle*)
-;(send *pr2* :rarm :end-coords :assoc *needle*)
+;      :rotation-axis :y) ;;yだと向きが違うき
+(send (send *needle* :parent) :dissoc *needle*)
+(send *pr2* :rarm :end-coords :assoc *needle*)
 (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
 
 
 
-;(send *ri* :start-grasp :rarm)
-;(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
-;(send *ri* :wait-interpolation)
-;(send *irtviewer* :draw-objects)
+(send *ri* :start-grasp :rarm)
+(send *ri* :stop-grasp :larm)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
 
 
-;(send *pr2* :larm :inverse-kinematics
-;      (send (send *desk* :get :left-coords) :copy-worldcoords)
-;      :rotation-axis :z)
-;(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
-;(send *ri* :wait-interpolation)
-;(send *irtviewer* :draw-objects)
+(send *pr2* :larm :inverse-kinematics
+      (send (send *desk* :get :left-coords) :copy-worldcoords)
+      :rotation-axis :z)
+(send (send *needle* :parent) :dissoc *needle*)
+(send *pr2* :rarm :end-coords :assoc *needle*)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
 
-;(send *pr2* :rarm :inverse-kinematics
-;      (send (send *desk* :get :left-coords) :copy-worldcoords)
-;      :rotation-axis :z)
-;(send (send *needle* :parent) :dissoc *needle*)
-;(send *pr2* :rarm :end-coords :assoc *needle*)
-;(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
-;(send *ri* :wait-interpolation)
+(send *pr2* :rarm :inverse-kinematics
+      (send (send *desk* :get :left-coords) :copy-worldcoords)
+      :rotation-axis :z)
+(send (send *needle* :parent) :dissoc *needle*)
+(send *pr2* :rarm :end-coords :assoc *needle*)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
 ;(send *irtviewer* :draw-objects)
 
 
@@ -255,4 +258,4 @@
 ;;how to dwaw coordination arrow
 ;(send (send (send *needle* :get :left-coords) :copy-worldcoords) :draw-on :flush t)
 
-/opt/ros/noetic/share/euslisp/jskeus/eus/Linux64/bin/irteusgl 0 error: keyword expected for arguments in (apply #'send self :inverse-kinematics (car args) :move-arm limb :use-torso use-torso (cdr args))
+;;スポンジ・針・こんにゃく・肉
