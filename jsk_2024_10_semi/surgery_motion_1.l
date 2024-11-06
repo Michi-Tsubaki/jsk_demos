@@ -11,8 +11,7 @@
 (require "package://pr2eus/pr2.l")
 (require "package://pr2eus/pr2-utils.l")
 (require "package://pr2eus/pr2-interface.l")
-(require "package://pr2eus/speak.l") ;;use :speak-jp
-;;https://github.com/wkentaro/jsk_pr2eus/blob/fad0691e0131275b76568a68096c6c9f6eead13e/pr2eus/speak.l#L4
+(require "package://pr2eus/speak.l") ;;use :speak-jp ;;https://github.com/wkentaro/jsk_pr2eus/blob/fad0691e0131275b76568a68096c6c9f6eead13e/pr2eus/speak.l#L4
 (load "models/arrow-object.l")
 
 
@@ -21,22 +20,20 @@
 
 
 ;;Setting cube as a desk for surgery. 
-(setq *desk* (make-cube 500 500 700))
-(send *desk* :translate (float-vector 700 0 350)) 
+(setq *desk* (make-cube 500 500 800))
+(send *desk* :translate (float-vector 700 0 400)) 
 (send *desk* :set-color :brown)
 ;[memo] (send *desk* :translate (float-vector 500 0 80)) ;;CAUTION!!(by Michi-Tsubaki)<-parameter that make robot motion NOT converge
 
-
 ;;Setting cylinder as needle.
 (setq *needle* (make-cylinder 2 40)) 
-(send *needle* :translate (float-vector 700 0 700))
+(send *needle* :translate (float-vector 700 0 850))
 (send *needle* :set-color :yellow)
 (send *needle* :rotate #d90 :x)
 
-
 ;;Set hampen
-(setq *hampen* (make-cube 60 60 20))
-(send *hampen* :translate (float-vector 700 0 660)) 
+(setq *hampen* (make-cube 60 60 30))
+(send *hampen* :translate (float-vector 700 0 830)) 
 ;(send *hampen* :translate (v+ (float-vector 0 0 310) (send *desk* :pos))
 (send *hampen* :set-color :white)
 
