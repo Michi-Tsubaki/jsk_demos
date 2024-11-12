@@ -11,8 +11,21 @@
 (require "package://pr2eus/pr2.l")
 (require "package://pr2eus/pr2-utils.l")
 (require "package://pr2eus/pr2-interface.l")
-(require "package://pr2eus/speak.l")
+(require "package://pr2eus/speak.l") ;;pkg for speaking
 (load "models/arrow-object.l")
+
+
+
+(defclass trajectory
+  :super cascaded-link
+  :slots (end-coords tp1 tp2 tp3 tp4 tp5))
+
+(defmethod trajectory
+  (:init ()
+	 (let (b)
+	   (send-super :init)
+  
+
 
 
 ;;Make PR2 object
@@ -31,30 +44,17 @@
 
 
 ;;Setting cylinder as needle.
-(setq *needle* (make-cylinder 1 40)) 
+(setq *needle* (make-cylinder 1 70)) 
 (send *needle* :translate (v+ (float-vector 0 20 100) (send *center* :pos)))
 (send *needle* :set-color :yellow)
 (send *needle* :rotate #d90 :x)
 
-;;Set hampen
-;(setq *hampen* (make-cube 75 120 30))
-;(send *hampen* :translate (v+ (float-vector 0 0 30/2) (send *center* :pos)))
-;(send *hampen* :set-color :white)
-
-;;Set left hampen
-(setq *left-hampen* (make-cube 75 60 30))
-(send *left-hampen* :translate (v+ (float-vector 0 -32 30/2) (send *center* :pos)))
-(send *left-hampen* :set-color :white)
-
-(setq *right-hampen* (make-cube 75 60 30))
-(send *right-hampen* :translate (v+ (float-vector 0 32 30/2) (send *center* :pos)))
-(send *right-hampen* :set-color :white)
-
-
-;;Set culynder hampen
-(setq *hampen* (make-cylyn
-
-;;Set coordination.
+;;Set hangetsu-shaped hampen
+(setq *hampen* (make-cylinder 50 100))
+(send *hampen* :translate (v+ (float-vector 0 0 0) (send *center* :pos)))
+(send *hampen* :set-color :white)
+(send *hampen* :rotate #d90 :y)
+;Set coordination.
 (send *desk* :put :left-coords
       (make-cascoords
        :coords (send (send *desk* :copy-worldcoords) :translate (float-vector 0 0 500))
@@ -69,7 +69,7 @@
 (send *arrow* :copy-worldcoords)
 
 ;;Show all objects in viewer. 
-(objects (list *pr2* *center* *arrow* *desk* *needle*  *left-hampen* *right-hampen*)) 
+(objects (list *pr2* *center* *arrow* *desk* *needle* *hampen*)) 
 
 
 ;Set initial pose
@@ -102,13 +102,47 @@
 (send *ri* :speak-jp "これから針を持って作業します．離れてください．" :wait t)
 (unix:sleep 2)
 
-(send *pr2* :larm :inverse-kinematics
-      (send (send *desk* :get :left-coords) :copy-worldcoords)
-      :rotation-axis :y)
-;(send *pr2* :rarm :inverse-kinematics
-;      (send (send *desk* :get :left-coords) :copy-worldcoords)
-;      :rotation-axis :z)
+
+;; 現在の目標位置を取得
+(setq current-coords (send (send *desk* :get :left-coords) :copy-worldcoords))
+
+;; z軸方向に10mmずらす
+(setq new-coords (send current-coords :translate (float-vector 0 100 50))) 
+
+;; 新しい位置で逆運動学を計算
+(send *pr2* :larm :inverse-kinematics new-coords :rotation-axis :y)
+
+
+(send *pr2* :larm :end-coords :assoc *needle*)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+
+
+;; 現在の目標位置を取得
+(setq current-coords (send (send *desk* :get :left-coords) :copy-worldcoords))
+
+;; z軸方向に10mmずらす
+(setq new-coords (send current-coords :translate (float-vector 0 -100 50))) 
+
+;; 新しい位置で逆運動学を計算
+(send *pr2* :rarm :inverse-kinematics new-coords :rotation-axis :y)
+
+
+
+
+
 (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
-;(unix:sleep 1)
+(unix:sleep 1)
+
+
+(send *pr2*
+      :inverse-kinematics (send (send (send *needle* :get :left-coords) :copy-worldcoords)
+                                      :translate (float-vector 0.0 -10.0 -10.0))
+      :move-target (send *needle* :get :left-coords)
+      :link-list (send *pr2* :link-list (send (send *pr2* :larm :end-coords) :parent))
+      :rotation-axis t
+      :debug-view t)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)

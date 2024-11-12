@@ -22,7 +22,6 @@ def callback(msg):
     niku = msg[0]
 
 
-if __mai
 
 rospy.init_node('client')
 rospy.Subscriber("/kinect_head/rgb/image_raw/compressed", CompressedImage, callback)
