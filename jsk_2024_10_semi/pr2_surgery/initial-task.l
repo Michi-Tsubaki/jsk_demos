@@ -25,8 +25,10 @@
 
     ;;Grasping needle (dummy)
     (send *pr2* :larm :inverse-kinematics
-    (send (send *needle* :get :left-coords) :copy-worldcoords)
-      :rotation-axis :z)
+	  (send (send (send *needle* :get :left-coords)
+		      :copy-worldcoords)
+		:rotate (deg2rad 180) :z)
+	  :rotation-axis :z)
     (send *pr2* :larm :end-coords :assoc *needle*)
     (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
     (send *ri* :wait-interpolation)
