@@ -40,6 +40,8 @@
 (send *hampen* :rotate #d45 :x)
 
 
+
+
 (defclass traj
   :super cascaded-coords
   :slots (points))
@@ -88,7 +90,11 @@
 (send *desk* :set-color :brown)
 
 ;;Set cylinder as needle.
-
+;;Set needle
+(setq *needle* (make-cylinder 0.5 70)) 
+(send *needle* :translate (v+ (float-vector 0 20 100) (send *center* :pos)))
+(send *needle* :set-color :yellow)
+(send *needle* :rotate #d90 :x)
   
 
 ;;Show Worldrecord
@@ -103,6 +109,7 @@
 (send *ri* :speak-jp "初期姿勢に戻ります。" :wait t)
 (send *pr2* :reset-pose)
 (send *ri* :start-grasp :arms)
+
 (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
