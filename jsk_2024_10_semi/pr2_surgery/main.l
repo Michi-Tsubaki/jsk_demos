@@ -50,6 +50,8 @@
 (initial-task) ;; check initial-task.l
 
 
+
+
 ;;Make Trajectory 
 (setq r (instance traj :init)) ;;check trajectory.l
 (send r :rotate pi/2 :z)
@@ -57,6 +59,8 @@
 (send r :locate *target*  :world)
 
 (objects (append (list *pr2* *center* *arrow* *desk* *needle* *hampen*) (send r :points)))
+
+
 
 ;;Set Start Position
 ;;Larm

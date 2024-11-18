@@ -22,4 +22,13 @@
     (send *irtviewer* :draw-objects)
     (send *ri* :speak-jp "これから針を持って作業します．離れてください．" :wait t)
     (unix:sleep 2)
+
+    ;;Grasping needle (dummy)
+    (send *pr2* :larm :inverse-kinematics
+    (send (send *needle* :get :left-coords) :copy-worldcoords)
+      :rotation-axis :z)
+    (send *pr2* :larm :end-coords :assoc *needle*)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+    (send *ri* :wait-interpolation)
+    (send *irtviewer* :draw-objects)
   )

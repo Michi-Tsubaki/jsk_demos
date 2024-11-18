@@ -21,4 +21,13 @@
   (send *hampen* :translate (v+ (float-vector 0 0 10) (send *center* :pos)))
   (send *hampen* :set-color :white)
   (send *hampen* :rotate #d45 :x)
+
+  (send *desk* :put :left-coords
+	(make-cascoords
+       :coords (send (send *desk* :copy-worldcoords) :translate (float-vector 0 0 500))
+       :parent *pr2*))
+  (send *needle* :put :left-coords
+	(make-cascoords
+       :coords (send (send *needle* :copy-worldcoords) :translate (float-vector 0 0 -5))
+       :parent *needle*)) 
 )
