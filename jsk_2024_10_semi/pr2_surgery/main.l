@@ -84,8 +84,8 @@
 
 
 (dolist (e (send r :points))
-  (send *pr2* :larm :inverse-kinematics (send e :rotate (deg2rad 90) :y)
-	:rotation-axis :x
+  (send *pr2* :larm :inverse-kinematics e
+	:rotation-axis (deg2rad 90) :y
 	:debug-view t)
   (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
   (send *ri* :wait-interpolation)
