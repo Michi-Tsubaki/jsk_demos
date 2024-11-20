@@ -12,9 +12,9 @@
 
   ;;Set needle
   (setq *needle* (make-cylinder 0.5 70))
-  (send *needle* :translate (v+ (float-vector 0 20 100) (send *center* :pos)))
+  (send *needle* :translate (v+ (float-vector 0 20 300) (send *center* :pos)))
   (send *needle* :set-color :yellow)
-  (send *needle* :rotate #d90 :x)
+  (send *needle* :rotate #d90 :y)
 
   ;;Set hampen
   (setq *hampen* (make-cube 50 50 50))

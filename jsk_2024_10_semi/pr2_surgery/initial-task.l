@@ -11,7 +11,18 @@
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
 
-    (send *ri* :speak-jp "左手を開きます。針を持たせてください。")
+    (send *pr2* :larm :inverse-kinematics
+	  (send (send (send *needle* :get :left-coords)
+		      :copy-worldcoords)
+		:rotate (deg2rad 90) :z)
+	  :rotation-axis :z
+	  :debug-view t)
+    (send *pr2* :larm :end-coords :assoc *needle*)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+    (send *ri* :wait-interpolation)
+    (send *irtviewer* :draw-objects)
+
+        (send *ri* :speak-jp "左手を開きます。針を持たせてください。")
     (send *ri* :stop-grasp :larm :wait t)
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
@@ -22,15 +33,4 @@
     (send *irtviewer* :draw-objects)
     (send *ri* :speak-jp "これから針を持って作業します．離れてください．" :wait t)
     (unix:sleep 2)
-
-    ;;Grasping needle (dummy)
-    (send *pr2* :larm :inverse-kinematics
-	  (send (send (send *needle* :get :left-coords)
-		      :copy-worldcoords)
-		:rotate (deg2rad 180) :z)
-	  :rotation-axis :z)
-    (send *pr2* :larm :end-coords :assoc *needle*)
-    (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
-    (send *ri* :wait-interpolation)
-    (send *irtviewer* :draw-objects)
-  )
+)
