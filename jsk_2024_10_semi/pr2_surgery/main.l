@@ -1,5 +1,7 @@
 #!/usr/bin/env roseus
 
+;;(progn (ros::rate 5)(do-until-key (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :larm :end-coords :worldpos) (send *pr2* :larm :end-coords :worldpos))) (ros::sleep)))
+
 #| DESCRIPTION
 Okada-sensei seminar
 Surgery-method dev2
@@ -20,6 +22,9 @@ GOAL: Trying to make unique motion for sewing sponge.
 (require "package://pr2eus/speak.l") ;;pkg for speaking
 
 
+(ros::load-ros-package "jsk_recognition_msgs")
+
+
 #| UNDER CONSTRUCTION
 ;; For perception
 (ros::load-ros-manifest "jsk_recognition_msgs")
@@ -31,34 +36,48 @@ GOAL: Trying to make unique motion for sewing sponge.
 (ros::roseus "surgery")
 |#
 
+(ros::roseus-add-msgs "speech_recognition_msgs")
 
 ;;Load class related
 (load "models/arrow-object.l") ;;*arrow*
 
 
-#| UNDER CONSTRUCTION
 ;; Voice Detection
 (defun speech-cb(msg)
   (setq *ans* (elt (send msg :transcript) 0))
-  (if (equalp *ans* "start")
+  (print *ans*)
+  (if (equal *ans* "メス")
       (setq *start-flag* 1)
     ;; 1回フラグが立てばそれでいい
-    )
+    ))
 
 (defun detect-voice () 
   (ros::ros-info "start waiting for call ~%")
-  (ros::rate 10)
+
   (ros::subscribe "speech_to_text" speech_recognition_msgs::SpeechRecognitionCandidates #'speech-cb)
+  (ros::rate 10)
+  (while (not (eq *start-flag* 1))
+    (ros::spin-once)
+    (ros::sleep)
+    (ros::ros-info "wait for voice command ...")
+    )
   )
 
-|#
 
+
+(defun cb-recog(msg)
+  (ros::ros-info "boxes ~A" (length (send msg :boxes)))
+  (if (> (length (send msg :boxes)) 0)
+
+      (setq *target-ypos-tmp* (send (send (send (elt (send msg :boxes) 0) :pose) :position) :y)) 
+    )
+  )
 
 ;;Global Param
 (setq *start-flag* 0)
 (setq *centerx* 700)
 (setq *centery* 0)
-(setq *centerz* 760)
+(setq *centerz* 750)
 (setq *deskw* 500)
 (setq *needle_len* 70)
 (setq *interval* 10)
@@ -66,8 +85,8 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *traj_len* (* *interval* *traj_num*))
 
 ;; Set remain
-(setq *remain* 300) ;;how long remaining thread?
-(setq *diff_remain* 60)
+(setq *remain* 280) ;;how long remaining thread?
+(setq *diff_remain* 100)
 
 ;; Offset
 (setq *rarm_offset* 2)
@@ -145,6 +164,8 @@ GOAL: Trying to make unique motion for sewing sponge.
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
 
+    (send *pr2* :head :look-at (send *center* :worldpos))
+
     (send *pr2* :larm :inverse-kinematics
 	  (send (send (send *needle* :get :left-coords)
 		      :copy-worldcoords)
@@ -200,15 +221,22 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 ;; The Doctore declare the start of the surgery.
 ;;音声認識********************************************************************************************************
-;;(detect-voice)
-(unix:sleep 3) ;;dummy
+(detect-voice)
+;;(unix:sleep 3) ;;dummy
 
 ;; Do initial task.
 (init-task)
 
 ;; Perception (dummy)
+(if (send *ri* :simulation-modep)
+    (setq *target-ypos-tmp* 0)
+  (setq *target-ypos-tmp* nil)
+  )
+(setq *target-ypos* 0)
 (setq *target-xpos* 0)
 (setq *target-zpos* 30)
+(ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-recog)
+
 
 (setq current-coords (send (send *desk* :get :left-coords) :copy-worldcoords))
 (setq new-coords (send current-coords :translate (float-vector 0 100 50))) 
@@ -218,15 +246,24 @@ GOAL: Trying to make unique motion for sewing sponge.
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
 
+;;
+
+(ros::rate 10)
+(while (null *target-ypos-tmp*)
+  (ros::ros-info "wait for target...")
+  ;;(ros::duration-sleep 0.1)
+  (ros::sleep)
+  (ros::spin-once))
+(setq *target-ypos* *target-ypos-tmp*)
+
 ;; Stitch
 (dotimes (i 5)
   ;; Make trajectory points. 
   (setq r (instance traj :init))
   (send r :rotate pi/2 :z)
-  (setq *target* (v+ (send *center* :pos) (float-vector (+ *target-xpos* (* i 3)) (* *traj_len* 0.2) *target-zpos*))) ;; 0.2は実験則 ;; Trajectoryの中心座標をHampenにあわせている
+  (setq *target* (v+ (send *center* :pos) (float-vector (+ *target-xpos* (* i 3)) (+ *target-ypos* (* *traj_len* 0.2)) *target-zpos*))) ;; 0.2は実験則 ;; Trajectoryの中心座標をHampenにあわせている
   (send r :locate *target*  :world)
   (objects (append (list *pr2* *center* *arrow* *desk* *needle* *hampen*) (send r :points)))
-
 
   ;; Set start position.
   ;; Rarm
@@ -272,25 +309,25 @@ GOAL: Trying to make unique motion for sewing sponge.
   (- *remain* *diff_remain*) ;; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
   (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
   (send *irtviewer* :draw-objects)
-  (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
+  (send *ri* :angle-vector (send *pr2* :angle-vector) 5000)
   (send *ri* :wait-interpolation) 
   (send *irtviewer* :draw-objects)
 
   ;; Move left hand to the delivery point.
   (setq *pass-larm* (send (send (send (send (send *center* :copy-worldcoords)
-					    :translate (float-vector 0 (* *needle_len* 0.5) 200))
+					    :translate (float-vector 50 (* *needle_len* 0.5) 150))
 				      :rotate pi/2 :z)
 				:rotate pi/2 :y)
 			  :rotate pi :x))
   (send *pass-larm* :draw-on :flush t :size 100) ;; for debug!
   (send *pr2* :larm :inverse-kinematics *pass-larm* :rotation-axis t :use-torso t) ;; Use torso! (腰を使わないとIKが解けないので注意)
-  (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+  (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
   (send *ri* :wait-interpolation)
   (send *irtviewer* :draw-objects)
 
   ;; Move right hand to the delivery point.
   (setq *pass-rarm* (send (send (send (send *center* :copy-worldcoords)
-				:translate (float-vector 0 (- 0 (* *needle_len* 0.5)) 200))
+				:translate (float-vector 50 (- 0 (* *needle_len* 0.5)) 150))
 			  :translate #f(-10 0 0))
 	:rotate -pi/2 :x))
   (send *pass-rarm* :draw-on :flush t :size 100) ;; for debug!
@@ -312,6 +349,7 @@ GOAL: Trying to make unique motion for sewing sponge.
   (send *ri* :speak-jp "繰り返し次の経路を縫います．注意してください．" :wait t)
   (unix:sleep 1)
   (send *pr2* :rarm :move-end-pos (float-vector 0 0 -50) :local)
+  (send *pr2* :larm :move-end-pos (float-vector 0 0 -100) :local)
   (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
   (send *ri* :wait-interpolation) 
   (send *irtviewer* :draw-objects)
