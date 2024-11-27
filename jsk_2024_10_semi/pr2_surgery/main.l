@@ -58,7 +58,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *start-flag* 0)
 (setq *centerx* 700)
 (setq *centery* 0)
-(setq *centerz* 800)
+(setq *centerz* 760)
 (setq *deskw* 500)
 (setq *needle_len* 70)
 (setq *interval* 10)
@@ -67,7 +67,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 ;; Set remain
 (setq *remain* 300) ;;how long remaining thread?
-(setq *diff_remain* 30)
+(setq *diff_remain* 60)
 
 ;; Offset
 (setq *rarm_offset* 2)
@@ -110,7 +110,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 
   ;;Set needle
   (setq *needle* (make-cylinder 0.5 *needle_len*))
-  (send *needle* :translate (v+ (float-vector 0 20 300) (send *center* :pos)))
+  (send *needle* :translate (v+ (float-vector -100 20 300) (send *center* :pos)))
   (send *needle* :set-color :yellow)
   (send *needle* :rotate #d90 :y)
 
@@ -210,6 +210,14 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *target-xpos* 0)
 (setq *target-zpos* 30)
 
+(setq current-coords (send (send *desk* :get :left-coords) :copy-worldcoords))
+(setq new-coords (send current-coords :translate (float-vector 0 100 50))) 
+(send *pr2* :larm :inverse-kinematics new-coords :rotation-axis :x)
+(send *pr2* :larm :end-coords :assoc *needle*)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
+
 ;; Stitch
 (dotimes (i 5)
   ;; Make trajectory points. 
@@ -224,7 +232,7 @@ GOAL: Trying to make unique motion for sewing sponge.
   ;; Rarm
   (setq *r-pos* (send (elt (send r :points) 9) :copy-worldcoords))
   (send *r-pos* :rotate pi/2 :y :local)
-  (send *r-pos* :rotate -1 :z :local) ;; if -pi/2, rarm state is parallel to desk 
+  (send *r-pos* :rotate -pi/2 :z :local) ;; if -pi/2, rarm state is parallel to desk 
   (send *r-pos* :translate #f(-10 0 0) :local)
   (send *pr2* :rarm :inverse-kinematics *r-pos*  :rotation-axis t)
   (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
@@ -284,7 +292,7 @@ GOAL: Trying to make unique motion for sewing sponge.
   (setq *pass-rarm* (send (send (send (send *center* :copy-worldcoords)
 				:translate (float-vector 0 (- 0 (* *needle_len* 0.5)) 200))
 			  :translate #f(-10 0 0))
-	:rotate pi/2 :x))
+	:rotate -pi/2 :x))
   (send *pass-rarm* :draw-on :flush t :size 100) ;; for debug!
   (send *pr2* :rarm :inverse-kinematics *pass-rarm*  :rotation-axis t) ;; Do not use torso! (左手との相対座標が狂う)
   (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
@@ -303,4 +311,9 @@ GOAL: Trying to make unique motion for sewing sponge.
   (send *pr2* :larm :end-coords :assoc *needle*)
   (send *ri* :speak-jp "繰り返し次の経路を縫います．注意してください．" :wait t)
   (unix:sleep 1)
+  (send *pr2* :rarm :move-end-pos (float-vector 0 0 -50) :local)
+  (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
+  (send *ri* :wait-interpolation) 
+  (send *irtviewer* :draw-objects)
+ 
   )
