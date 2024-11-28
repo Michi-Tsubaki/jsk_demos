@@ -7,11 +7,14 @@ Okada-sensei seminar
 Surgery-method dev2
 Last editted Nov 23 by Michi-Tsubaki
 GOAL: Trying to make unique motion for sewing sponge.
+## Done
+- voice recognition
+- perception
+- stitch sponge 
+
 今後やること
-・実際のスポンジを縫う
-・音声認識で手術開始(detect-voice)
 ・画像認識で位置決め(Perception)
-・手術ロボットでにしてみる
+・手術ロボットでしてみる
 ・曲がった経路にする(make-trajectory)
 |#
 
