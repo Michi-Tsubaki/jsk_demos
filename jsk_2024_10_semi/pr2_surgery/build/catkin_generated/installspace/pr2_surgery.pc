@@ -1,0 +1,8 @@
+prefix=/usr/local
+
+Name: pr2_surgery
+Description: Description of pr2_surgery
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

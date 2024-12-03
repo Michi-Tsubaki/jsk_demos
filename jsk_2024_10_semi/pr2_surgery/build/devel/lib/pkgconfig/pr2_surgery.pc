@@ -1,0 +1,8 @@
+prefix=/home/mech-user/semi_ws/src/jsk_2024_10_semi/pr2_surgery/build/devel
+
+Name: pr2_surgery
+Description: Description of pr2_surgery
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
