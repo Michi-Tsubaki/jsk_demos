@@ -5,15 +5,14 @@
 #| DESCRIPTION
 Okada-sensei seminar
 Surgery-method dev2
-Last editted Nov 23 by Michi-Tsubaki
+Last editted Dec 04 by Michi-Tsubaki
 GOAL: Trying to make unique motion for sewing sponge.
 ## Done
 - voice recognition
 - perception
 - stitch sponge 
 
-今後やること
-・画像認識で位置決め(Perception)
+## For Future
 ・手術ロボットでしてみる
 ・曲がった経路にする(make-trajectory)
 |#
@@ -26,23 +25,21 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 
 (ros::load-ros-package "jsk_recognition_msgs")
-
-
-#| UNDER CONSTRUCTION
-;; For perception
-(ros::load-ros-manifest "jsk_recognition_msgs")
-
-;; For listening
-(ros::roseus-add-msgs "speech_recognition_msgs")
-
-;;set node
-(ros::roseus "surgery")
-|#
-
 (ros::roseus-add-msgs "speech_recognition_msgs")
 
 ;;Load class related
 (load "models/arrow-object.l") ;;*arrow*
+
+
+
+
+(defun is-draw()
+  (setq diff (elt (v- (send *ri* :robot :larm :end-coords :worldpos) (send *pr2* :larm :end-coords :worldpos)) 2))
+  (if (> diff *draw_threshold*)
+      (setq *draw_flag* 1)
+    (setq *draw_flag* 0)
+    )
+  )
 
 
 ;; Voice Detection
@@ -86,6 +83,9 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *interval* 10)
 (setq *traj_num* 10)
 (setq *traj_len* (* *interval* *traj_num*))
+(setq *draw_threshold* 3)
+(setq *draw_flag* 0)
+(setq *is_first* 1)
 
 ;; Set remain
 (setq *remain* 280) ;;how long remaining thread?
@@ -186,6 +186,7 @@ GOAL: Trying to make unique motion for sewing sponge.
     (send *irtviewer* :draw-objects)
     )
 
+
 ;;Define initial task.
 (defun init-task()
     (send *ri* :speak-jp "手を閉じます．挟まれないように気をつけてください" :wait t)
@@ -224,8 +225,8 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 ;; The Doctore declare the start of the surgery.
 ;;音声認識********************************************************************************************************
-(detect-voice)
-;;(unix:sleep 3) ;;dummy
+;;(detect-voice)
+(unix:sleep 3) ;;dummy
 
 ;; Do initial task.
 (init-task)
@@ -306,15 +307,35 @@ GOAL: Trying to make unique motion for sewing sponge.
   ;; Fix the right arm and neadle (針の固定を左から右に移す)
   (send *pr2* :larm :end-coords :dissoc *needle*)
   (send *pr2* :rarm :end-coords :assoc *needle*)
-  
+  (format t "is_first: ~A ~%" *is_first*)
   ;; Draw the needle from the object. (対象物から針を抜き出)
-  (send *pr2* :rarm :move-end-pos (float-vector 0 0 (- 0 *remain*)) :local)
-  (- *remain* *diff_remain*) ;; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-  (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
-  (send *irtviewer* :draw-objects)
-  (send *ri* :angle-vector (send *pr2* :angle-vector) 5000)
-  (send *ri* :wait-interpolation) 
-  (send *irtviewer* :draw-objects)
+  (if (= *is_first* 1)
+      (progn (send *pr2* :rarm :move-end-pos (float-vector 0 0 (- 0 *remain*)) :local)
+	     (- *remain* *diff_remain*) ;; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
+	     (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
+	     (send *irtviewer* :draw-objects)
+	     (send *ri* :angle-vector (send *pr2* :angle-vector) 5000)
+	     (send *ri* :wait-interpolation) 
+	     (send *irtviewer* :draw-objects))
+    (progn
+      (while (= *draw_flag* 0)
+	(progn
+	  (is-draw)
+	  (send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
+	  (setq remain_tmp (- *remain* *diff_remain*))
+	  (- *remain* 5);; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
+	  (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
+	  (if (> *remain*  remain_tmp)
+	      (setq *draw_flag* 1)
+	    )
+	  (send *irtviewer* :draw-objects)
+	  (send *ri* :angle-vector (send *pr2* :angle-vector) 100)
+	  ;(send *ri* :wait-interpolation) 
+	  (send *irtviewer* :draw-objects)
+	  )
+	)
+      )
+    )
 
   ;; Move left hand to the delivery point.
   (setq *pass-larm* (send (send (send (send (send *center* :copy-worldcoords)
@@ -330,9 +351,9 @@ GOAL: Trying to make unique motion for sewing sponge.
 
   ;; Move right hand to the delivery point.
   (setq *pass-rarm* (send (send (send (send *center* :copy-worldcoords)
-				:translate (float-vector 50 (- 0 (* *needle_len* 0.5)) 150))
-			  :translate #f(-10 0 0))
-	:rotate -pi/2 :x))
+				      :translate (float-vector 50 (- 0 (* *needle_len* 0.5)) 150))
+				:translate #f(-10 0 0))
+			  :rotate -pi/2 :x))
   (send *pass-rarm* :draw-on :flush t :size 100) ;; for debug!
   (send *pr2* :rarm :inverse-kinematics *pass-rarm*  :rotation-axis t) ;; Do not use torso! (左手との相対座標が狂う)
   (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
@@ -345,7 +366,7 @@ GOAL: Trying to make unique motion for sewing sponge.
   (unix:sleep 1)
   (send *ri* :stop-grasp :rarm)
   (send *ri* :wait-interpolation)
- 
+  
   ;; Fix the left arm and needle again (針の固定を右から左に移す)
   (send *pr2* :rarm :end-coords :dissoc *needle*)
   (send *pr2* :larm :end-coords :assoc *needle*)
@@ -356,5 +377,6 @@ GOAL: Trying to make unique motion for sewing sponge.
   (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
   (send *ri* :wait-interpolation) 
   (send *irtviewer* :draw-objects)
- 
+  
+  (setq *is_first* 0)
   )
