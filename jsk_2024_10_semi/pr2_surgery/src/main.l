@@ -60,7 +60,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 
 (defun is-draw()
-  (setq diff (elt (v- (progn (send *ri* :update-robot-state) (send *ri* :robot :rarm :end-coords :worldpos)) (send *pr2* :rarm :end-coords :worldpos)) 1))
+  (setq diff (elt (print (v- (progn (send *ri* :update-robot-state) (send *ri* :robot :rarm :end-coords :worldpos)) (send *pr2* :rarm :end-coords :worldpos))) 1))
   (format t "~A ~A ~%" diff *draw_threshold*)
   (if (> diff *draw_threshold*)
       (setq *draw_flag* 1)
@@ -110,13 +110,13 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *interval* 10)
 (setq *traj_num* 10)
 (setq *traj_len* (* *interval* *traj_num*))
-(setq *draw_threshold* 4)
+(setq *draw_threshold* 0)
 (setq *draw_flag* 0)
 (setq *is_first* 1)
 
 ;; Set remain
-(setq *remain* 400) ;;how long remaining thread?
-(setq *diff_remain* 80)
+(setq *remain* 450) ;;how long remaining thread?
+(setq *diff_remain* 45)
 
 ;; Offset
 (setq *rarm_offset* 2)
@@ -367,20 +367,20 @@ GOAL: Trying to make unique motion for sewing sponge.
       (send *ri* :angle-vector (send *pr2* :angle-vector) 600)
       (send *ri* :wait-interpolation) 
       (send *irtviewer* :draw-objects)
-      (setq *remain* (- *remain* 60));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
+      ;;(setq *remain* (- *remain* 60));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
       (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
       (if (> *remain*  remain_tmp)
 	  (while (= *draw_flag* 0)
 	    (progn
 	      (is-draw)
-	      (progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :larm :end-coords :worldpos) (send *pr2* :larm :end-coords :worldpos))))
+	      ;(progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :rarm :end-coords :worldpos) (send *pr2* :rarm :end-coords :worldpos))))
 	      (send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
 	      (setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
 	      (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
-	      (format t "draw_flag: ~A ~%" *draw_flag*)
 	      (if (< *remain*  remain_tmp)
 		  (setq *draw_flag* 1)
 		)
+	      (format t "draw_flag: ~A ~%" *draw_flag*)
 	      (send *irtviewer* :draw-objects)
 	      (send *ri* :angle-vector (send *pr2* :angle-vector) 100)
 	      (send *ri* :wait-interpolation) 
