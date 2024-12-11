@@ -4,6 +4,7 @@
 
 
 #|
+
 (setq a nil)
 (push 0 a)
 (push 1 a)
@@ -49,6 +50,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 (ros::load-ros-package "jsk_recognition_msgs")
 (ros::roseus-add-msgs "speech_recognition_msgs")
+(ros::roseus-add-msgs "geometry_msgs")
 
 ;;Load class related
 (load "models/arrow-object.l") ;;*arrow*
@@ -94,11 +96,19 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 (defun cb-recog(msg)
   (ros::ros-info "boxes ~A" (length (send msg :boxes)))
-  (if (> (length (send msg :boxes)) 0)
-
+  (if (and (> (length (send msg :boxes)) 0) (> (send (send (elt (send msg :boxes) 0) :dimensions) :x) 0)) 
       (setq *target-ypos-tmp* (send (send (send (elt (send msg :boxes) 0) :pose) :position) :y)) 
     )
   )
+
+(defun cb-rforce(msg)
+  (ros::ros-info "checking force ")
+  (if (> (send (send (send msg :wrench) :force) :y) 0.2)
+      (setq *drawing* t)
+    )
+  )
+
+      
 
 ;;Global Param
 (setq *start-flag* 0)
@@ -113,7 +123,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *draw_threshold* 0)
 (setq *draw_flag* 0)
 (setq *is_first* 1)
-
+(setq *drawing* nil)
 ;; Set remain
 (setq *remain* 450) ;;how long remaining thread?
 (setq *diff_remain* 45)
@@ -182,16 +192,11 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 ;;Define preparation task.
 (defun preparation()
-    (require "package://pr2eus/pr2.l")
-    (require "package://pr2eus/pr2-utils.l")
-    (require "package://pr2eus/pr2-interface.l")
-    (require "package://pr2eus/speak.l")
-    
     (send *ri* :speak-jp "縫合を始めます．注意してください．" :wait t)
     (send *pr2* :reset-pose) ;;Set Initial Pose
     (send *pr2* :torso :waist-z :joint-angle 240)
     (send *ri* :start-grasp :arms)
-    (send *ri* :angle-vector (send *pr2* :angle-vector) 1000)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
 
@@ -227,7 +232,7 @@ GOAL: Trying to make unique motion for sewing sponge.
     ;;Grasp needle (dummy)
     (send *pr2* :larm :inverse-kinematics (send (send (send *needle* :get :left-coords) :copy-worldcoords) :rotate (deg2rad 90) :z) :rotation-axis :z)
     (send *pr2* :larm :end-coords :assoc *needle*) ;;針を固定
-    (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
+    (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
     )
@@ -253,23 +258,25 @@ GOAL: Trying to make unique motion for sewing sponge.
 
 ;; The Doctore declare the start of the surgery.
 ;;音声認識********************************************************************************************************
-(detect-voice)
-;;(unix:sleep 3) ;;dummy
+;;(detect-voice)
+(unix:sleep 1) ;;dummy
 
 ;; Do initial task.
 (init-task)
 
 ;; Perception (dummy)
+#|
 (if (send *ri* :simulation-modep)
     (setq *target-ypos-tmp* 0)
   (setq *target-ypos-tmp* nil)
   )
+|#
 (setq *target-ypos* 0)
 (setq *target-xpos* 0)
 (setq *target-zpos* 30)
 (ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-recog)
 
-
+;;dummy pos
 (setq current-coords (send (send *desk* :get :left-coords) :copy-worldcoords))
 (setq new-coords (send current-coords :translate (float-vector 0 100 50))) 
 (send *pr2* :larm :inverse-kinematics new-coords :rotation-axis :x)
@@ -278,8 +285,10 @@ GOAL: Trying to make unique motion for sewing sponge.
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
 
-;;
-
+(if (send *ri* :simulation-modep)
+    (setq *target-ypos-tmp* 0)
+  (setq *target-ypos-tmp* nil)
+  )
 (ros::rate 10)
 (while (null *target-ypos-tmp*)
   (ros::ros-info "wait for target...")
@@ -293,7 +302,7 @@ GOAL: Trying to make unique motion for sewing sponge.
   ;; Make trajectory points. 
   (setq r (instance traj :init))
   (send r :rotate pi/2 :z)
-  (setq *target* (v+ (send *center* :pos) (float-vector (+ *target-xpos* (* i 3)) (+ *target-ypos* (* *traj_len* 0.2)) *target-zpos*))) ;; 0.2は実験則 ;; Trajectoryの中心座標をHampenにあわせている
+  (setq *target* (v+ (send *center* :pos) (float-vector (+ *target-xpos* (* i 3)) (+ *target-ypos* (* *traj_len* 0.12)) *target-zpos*))) ;; 0.2は実験則 ;; Trajectoryの中心座標をHampenにあわせている
   (send r :locate *target*  :world)
   (objects (append (list *pr2* *center* *arrow* *desk* *needle* *hampen*) (send r :points)))
 
@@ -308,7 +317,6 @@ GOAL: Trying to make unique motion for sewing sponge.
   (send *ri* :stop-grasp :rarm)
   (send *ri* :wait-interpolation)
   (send *irtviewer* :draw-objects)
-
   ;; Follow the trajectory points. Stitch.
   (setq tm 500)
   (setq path (list))
@@ -370,23 +378,42 @@ GOAL: Trying to make unique motion for sewing sponge.
       ;;(setq *remain* (- *remain* 60));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
       (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
       (if (> *remain*  remain_tmp)
-	  (while (= *draw_flag* 0)
-	    (progn
-	      (is-draw)
-	      ;(progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :rarm :end-coords :worldpos) (send *pr2* :rarm :end-coords :worldpos))))
-	      (send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
-	      (setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-	      (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
-	      (if (< *remain*  remain_tmp)
-		  (setq *draw_flag* 1)
-		)
-	      (format t "draw_flag: ~A ~%" *draw_flag*)
-	      (send *irtviewer* :draw-objects)
-	      (send *ri* :angle-vector (send *pr2* :angle-vector) 100)
-	      (send *ri* :wait-interpolation) 
-	      (send *irtviewer* :draw-objects)
+	  (while (not *drawing*)
+	    (is-draw)
+	    ;;(progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :rarm :end-coords :worldpos) (send *pr2* :rarm :end-coords :worldpos))))
+	    (ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-rforce)
+	    (send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
+	    (setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
+	    (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
+	    (if (< *remain*  remain_tmp)
+		(setq *drawing* t)
 	      )
+	    (format t "drawing: ~A ~%" *drawing*)
+	    (send *irtviewer* :draw-objects)
+	    (send *ri* :angle-vector (send *pr2* :angle-vector) 100)
+	    (send *ri* :wait-interpolation) 
+	    (send *irtviewer* :draw-objects)
+	    
 	    )
+	
+	
+	#|(while (= *draw_flag* 0)
+	(progn
+	(is-draw)
+	      ;(progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :rarm :end-coords :worldpos) (send *pr2* :rarm :end-coords :worldpos)))) ;
+	(send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
+	(setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
+	(format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
+	(if (< *remain*  remain_tmp)
+	(setq *draw_flag* 1)
+	)
+	(format t "draw_flag: ~A ~%" *draw_flag*)
+	(send *irtviewer* :draw-objects)
+	(send *ri* :angle-vector (send *pr2* :angle-vector) 100)
+	(send *ri* :wait-interpolation) 
+	(send *irtviewer* :draw-objects)
+	)
+	)|#
 	)
       )
     )
