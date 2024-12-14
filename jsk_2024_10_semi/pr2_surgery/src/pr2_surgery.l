@@ -1,114 +1,21 @@
 #!/usr/bin/env roseus
 
-;;(progn (ros::rate 5)(do-until-key (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :larm :end-coords :worldpos) (send *pr2* :larm :end-coords :worldpos))) (ros::sleep)))
-
-
-#|
-
-(setq a nil)
-(push 0 a)
-(push 1 a)
-(push 2 a)
-(setq a (reverse a))
-(print a)
-(dolist (b a)
- (print b))
-
-(print "--")
-(setq a nil)
-(setq a (append a (list 0)))
-(setq a (append a (list 1)))
-(setq a (append a (list 2)))
-(print a)
-(dolist (b a)
- (print b))
-
-|#
-
-
 #| DESCRIPTION
 Okada-sensei seminar
 Surgery-method dev2
-Last editted Dec 04 by Michi-Tsubaki
-GOAL: Trying to make unique motion for sewing sponge.
-## Done
-- voice recognition
-- perception
+Last editted Dec 14 by Michi-Tsubaki
+GOAL: Trying to make unique motion for stitching sponge!
+
+## Functions
+- voice recognition (trriger)
+- perception (recognize wound)
 - stitch sponge 
 
 ## For Future
-・手術ロボットでしてみる
-・曲がった経路にする(make-trajectory)
+- Dual Pandaでやってみたい．
+- チート実験台ではなく，平らな傷口に上面からアプローチしたい
+- そのために，class trajを継承して曲がった経路を生成する
 |#
-
-;;Load pkgs around PR2 Interface
-(require "package://pr2eus/pr2.l")
-(require "package://pr2eus/pr2-utils.l")
-(require "package://pr2eus/pr2-interface.l") ;;*ri*
-(require "package://pr2eus/speak.l") ;;pkg for speaking
-
-
-(ros::load-ros-package "jsk_recognition_msgs")
-(ros::roseus-add-msgs "speech_recognition_msgs")
-(ros::roseus-add-msgs "geometry_msgs")
-
-;;Load class related
-(load "models/arrow-object.l") ;;*arrow*
-
-
-(defun stop()
-  (send *ri* :stop-grasp)
-  )
-
-
-(defun is-draw()
-  (setq diff (elt (print (v- (progn (send *ri* :update-robot-state) (send *ri* :robot :rarm :end-coords :worldpos)) (send *pr2* :rarm :end-coords :worldpos))) 1))
-  (format t "~A ~A ~%" diff *draw_threshold*)
-  (if (> diff *draw_threshold*)
-      (setq *draw_flag* 1)
-    (setq *draw_flag* 0)
-    )
-  )
-
-
-;; Voice Detection
-(defun speech-cb(msg)
-  (setq *ans* (elt (send msg :transcript) 0))
-  (print *ans*)
-  (if (equal *ans* "どうぞ")
-      (setq *start-flag* 1)
-    ;; 1回フラグが立てばそれでいい
-    ))
-
-(defun detect-voice () 
-  (ros::ros-info "start waiting for call ~%")
-
-  (ros::subscribe "speech_to_text" speech_recognition_msgs::SpeechRecognitionCandidates #'speech-cb)
-  (ros::rate 10)
-  (while (not (eq *start-flag* 1))
-    (ros::spin-once)
-    (ros::sleep)
-    (ros::ros-info "wait for voice command ...")
-    )
-  )
-
-
-
-(defun cb-recog(msg)
-  (ros::ros-info "boxes ~A" (length (send msg :boxes)))
-  (if (and (> (length (send msg :boxes)) 0) (> (send (send (elt (send msg :boxes) 0) :dimensions) :x) 0)) 
-      (setq *target-ypos-tmp* (send (send (send (elt (send msg :boxes) 0) :pose) :position) :y)) 
-    )
-  )
-
-(defun cb-rforce(msg)
-  (ros::ros-info "checking force ")
-  (if (> (send (send (send msg :wrench) :force) :y) 0.2)
-      (setq *drawing* t)
-    )
-  )
-
-      
 
 ;;Global Param
 (setq *start-flag* 0)
@@ -124,6 +31,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 (setq *draw_flag* 0)
 (setq *is_first* 1)
 (setq *drawing* nil)
+
 ;; Set remain
 (setq *remain* 450) ;;how long remaining thread?
 (setq *diff_remain* 45)
@@ -131,7 +39,114 @@ GOAL: Trying to make unique motion for sewing sponge.
 ;; Offset
 (setq *rarm_offset* 2)
 
+;;Load pkgs around PR2 Interface
+(require "package://pr2eus/pr2.l")
+(require "package://pr2eus/pr2-utils.l")
+(require "package://pr2eus/pr2-interface.l") ;;*ri*
+(require "package://pr2eus/speak.l") ;;pkg for speaking
 
+;;ros msgs
+(ros::load-ros-package "jsk_recognition_msgs")
+(ros::roseus-add-msgs "speech_recognition_msgs")
+(ros::roseus-add-msgs "geometry_msgs")
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Environment ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Define set-environment method
+(defun set-env()
+  ;;Set center
+  (setq *deskh* *centerz*)
+
+  (setq *center* (make-cube 10 10 10))
+  (send *center* :translate (float-vector *centerx* *centery* *centerz*))
+  (send *center* :set-color :black)
+  (setq *o* (send *center* :copy-worldcoords))
+
+  ;;Set desk
+  (setq *desk* (make-cube *deskw* *deskw* *deskh*))
+  (send *desk* :translate (float-vector *centerx* *centery* (/ *centerz* 2))) 
+  (send *desk* :set-color :brown)
+
+  ;;Set needle
+  (setq *needle* (make-cylinder 0.5 *needle_len*))
+  (send *needle* :translate (v+ (float-vector -100 20 300) (send *center* :pos)))
+  (send *needle* :set-color :yellow)
+  (send *needle* :rotate #d90 :y)
+
+  ;;Set hampen
+  (setq *hampen* (make-cube 50 50 50))
+  (send *hampen* :translate (v+ (float-vector 0 0 10) (send *center* :pos)))
+  (send *hampen* :set-color :white)
+  (send *hampen* :rotate #d45 :x)
+
+  (send *desk* :put :left-coords
+	(make-cascoords
+       :coords (send (send *desk* :copy-worldcoords) :translate (float-vector 0 0 500))
+       :parent *pr2*))
+  (send *needle* :put :left-coords
+	(make-cascoords
+       :coords (send (send *needle* :copy-worldcoords) :translate (float-vector 0 0 -5))
+       :parent *needle*)) 
+)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Sensing ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Voice Detection
+(defun speech-cb(msg)
+  (setq *ans* (elt (send msg :transcript) 0))
+  (print *ans*)
+  (if (equal *ans* "どうぞ")
+      (setq *start-flag* 1)
+    ;; 1回フラグが立てばそれでいい
+    ))
+
+(defun detect-voice () 
+  (ros::ros-info "start waiting for call ~%")
+  (ros::subscribe "speech_to_text" speech_recognition_msgs::SpeechRecognitionCandidates #'speech-cb)
+  (ros::rate 10)
+  (while (not (eq *start-flag* 1))
+    (ros::spin-once)
+    (ros::sleep)
+    (ros::ros-info "wait for voice command ...")
+    )
+  )
+
+;; Perception
+(defun cb-recog(msg)
+  (ros::ros-info "boxes ~A" (length (send msg :boxes)))
+  (if (and (> (length (send msg :boxes)) 0) (> (send (send (elt (send msg :boxes) 0) :dimensions) :x) 0)) 
+      (setq *target-ypos-tmp* (send (send (send (elt (send msg :boxes) 0) :pose) :position) :y)) 
+    )
+  )
+
+(defun detect-wound()
+  (ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-recog)
+  (ros::rate 10)
+  (while (null *target-ypos-tmp*)
+    (ros::ros-info "wait for target...")
+    (ros::sleep)
+    (ros::spin-once))
+  (setq *target-ypos* *target-ypos-tmp*)
+  )
+
+;; Drawing Detection
+(defun is-draw()
+  (setq diff (elt (print (v- (progn (send *ri* :update-robot-state) (send *ri* :robot :rarm :end-coords :worldpos)) (send *pr2* :rarm :end-coords :worldpos))) 1))
+  (format t "~A ~A ~%" diff *draw_threshold*)
+  (if (> diff *draw_threshold*)
+      (setq *draw_flag* 1)
+    (setq *draw_flag* 0)
+    )
+  )
+
+(defun cb-rforce(msg)
+  (ros::ros-info "checking force ")
+  (if (> (send (send (send msg :wrench) :force) :y) 0.2)
+      (setq *drawing* t)
+    )
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Stitching ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Path ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Define Trajectory Class
 (defclass traj
   :super cascaded-coords
@@ -147,9 +162,9 @@ GOAL: Trying to make unique motion for sewing sponge.
     (dotimes (i (- (length points) 1))
       (send (elt points i) :assoc (elt points (+ 1 i))))
     (send self :assoc (car points))
-    self) ;; :init
+    self)
   (:points () points)
-  ) ;; defmethod
+  )
 
 
 ;; Define set-environment method
@@ -189,7 +204,7 @@ GOAL: Trying to make unique motion for sewing sponge.
        :parent *needle*)) 
 )
 
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Motion ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;Define preparation task.
 (defun preparation()
     (send *ri* :speak-jp "縫合を始めます．注意してください．" :wait t)
@@ -226,7 +241,7 @@ GOAL: Trying to make unique motion for sewing sponge.
     (send *ri* :start-grasp :larm :wait t)
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
-    (send *ri* :speak-jp "これから針を持って作業します．" :wait t)
+    (send *ri* :speak-jp "これから針を持って作業します．離れてください．" :wait t)
     (unix:sleep 2)
 
     ;;Grasp needle (dummy)
@@ -235,15 +250,16 @@ GOAL: Trying to make unique motion for sewing sponge.
     (send *ri* :angle-vector (send *pr2* :angle-vector) 2000)
     (send *ri* :wait-interpolation)
     (send *irtviewer* :draw-objects)
-    )
+)
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; others ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun stop()
+  (send *ri* :stop-grasp)
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;main.l;;;;;
-
-;;Set arrow (for debug)
-(setq *arrow* (arrow))
-(send *arrow* :copy-worldcoords)
-
 ;;Set PR2
 (if (not (boundp '*pr2*)) (pr2-init)) 
 
@@ -251,32 +267,21 @@ GOAL: Trying to make unique motion for sewing sponge.
 (set-env)
 
 ;; Show all objects in irtviewer.
-(objects (list *pr2* *center* *arrow* *desk* *needle* *hampen*))
+(objects (list *pr2* *center* *desk* *needle* *hampen*))
 
 ;; Human help Robot to grab needle.
 (preparation)
 
-;; The Doctore declare the start of the surgery.
-;;音声認識********************************************************************************************************
-;;(detect-voice)
-(unix:sleep 1) ;;dummy
+;; The Nurse pass the needle saying "douzo!"
+(if (send *ri* :simulation-modep)
+    (unix:sleep 2)
+  (detect-voice)
+  )
 
 ;; Do initial task.
 (init-task)
 
-;; Perception (dummy)
-#|
-(if (send *ri* :simulation-modep)
-    (setq *target-ypos-tmp* 0)
-  (setq *target-ypos-tmp* nil)
-  )
-|#
-(setq *target-ypos* 0)
-(setq *target-xpos* 0)
-(setq *target-zpos* 30)
-(ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-recog)
-
-;;dummy pos
+;; Dummy pos to be able to calculate IK
 (setq current-coords (send (send *desk* :get :left-coords) :copy-worldcoords))
 (setq new-coords (send current-coords :translate (float-vector 0 100 50))) 
 (send *pr2* :larm :inverse-kinematics new-coords :rotation-axis :x)
@@ -285,26 +290,26 @@ GOAL: Trying to make unique motion for sewing sponge.
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
 
+;; Perception
+;; Perception (dummy)
+(setq *target-ypos* 0)
+(setq *target-xpos* 0)
+(setq *target-zpos* 30)
+(ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-recog)
 (if (send *ri* :simulation-modep)
     (setq *target-ypos-tmp* 0)
   (setq *target-ypos-tmp* nil)
   )
-(ros::rate 10)
-(while (null *target-ypos-tmp*)
-  (ros::ros-info "wait for target...")
-  ;;(ros::duration-sleep 0.1)
-  (ros::sleep)
-  (ros::spin-once))
-(setq *target-ypos* *target-ypos-tmp*)
+(detect-wound)
 
 ;; Stitch
-(dotimes (i 4)
+(dotimes (i 5)
   ;; Make trajectory points. 
   (setq r (instance traj :init))
   (send r :rotate pi/2 :z)
   (setq *target* (v+ (send *center* :pos) (float-vector (+ *target-xpos* (* i 3)) (+ *target-ypos* (* *traj_len* 0.12)) *target-zpos*))) ;; 0.2は実験則 ;; Trajectoryの中心座標をHampenにあわせている
   (send r :locate *target*  :world)
-  (objects (append (list *pr2* *center* *arrow* *desk* *needle* *hampen*) (send r :points)))
+  (objects (append (list *pr2* *center*  *desk* *needle* *hampen*) (send r :points)))
 
   ;; Set start position.
   ;; Rarm
@@ -368,7 +373,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 	     (send *ri* :wait-interpolation) 
 	     (send *irtviewer* :draw-objects))
     (progn
-      (setq *draw_flag* 0)
+      (setq *drawing* nil)
       (setq remain_tmp (- *remain* *diff_remain*))
       (send *pr2* :rarm :move-end-pos (float-vector 0 0 -60) :local)
       (send *irtviewer* :draw-objects)
@@ -391,7 +396,7 @@ GOAL: Trying to make unique motion for sewing sponge.
 	    (format t "drawing: ~A ~%" *drawing*)
 	    (send *irtviewer* :draw-objects)
 	    (send *ri* :angle-vector (send *pr2* :angle-vector) 100)
-	    (send *ri* :wait-interpolation) 
+	    ;;(send *ri* :wait-interpolation) 
 	    (send *irtviewer* :draw-objects)
 	    
 	    )
@@ -452,7 +457,7 @@ GOAL: Trying to make unique motion for sewing sponge.
   ;; Fix the left arm and needle again (針の固定を右から左に移す)
   (send *pr2* :rarm :end-coords :dissoc *needle*)
   (send *pr2* :larm :end-coords :assoc *needle*)
-  (send *ri* :speak-jp "繰り返し，を縫います．注意してください．" :wait t)
+  (send *ri* :speak-jp "繰り返し，つぎの経路で縫います．注意してください．" :wait t)
   (unix:sleep 1)
   (send *pr2* :rarm :move-end-pos (float-vector 0 0 -50) :local)
   (send *pr2* :larm :move-end-pos (float-vector 0 0 -100) :local)
@@ -462,4 +467,5 @@ GOAL: Trying to make unique motion for sewing sponge.
   
   (setq *is_first* 0)
   )
-(send *ri* :speak-jp "手術が終了しました．お疲れ様でした．" :wait t)
+
+(send *ri* :speak-jp "縫合が終了しました．お疲れ様でした．" :wait t)

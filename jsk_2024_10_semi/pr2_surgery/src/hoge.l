@@ -14,4 +14,10 @@
 (setq a (append a (list 2)))
 (print a)
 (dolist (b a)
- (print b)) ;;
+  (print b)) ;;
+
+
+
+
+
+
