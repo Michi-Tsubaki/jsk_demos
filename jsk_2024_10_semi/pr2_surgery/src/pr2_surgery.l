@@ -139,12 +139,20 @@ GOAL: Trying to make unique motion for stitching sponge!
   )
 
 (defun cb-rforce(msg)
-  (ros::ros-info "checking force ")
-  (if (> (send (send (send msg :wrench) :force) :y) 0.2)
-      (setq *drawing* t)
+  (ros::ros-info "checking right-virtual-force")
+  (setq *rforce* (send (send (send msg :wrench) :force) :z))
+  (if (> (send (send (send msg :wrench) :force) :z) 0.10)
+      (setq *right-drawing* t)
     )
   )
 
+(defun cb-lforce(msg)
+  (ros::ros-info "checking left-virtual-force")
+  (setq *lforce* (send (send (send msg :wrench) :force) :z))
+  (if (< (send (send (send msg :wrench) :force) :z) -0.3)
+      (setq *left-drawing* t)
+    )
+  )
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Stitching ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Path ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Define Trajectory Class
@@ -303,7 +311,7 @@ GOAL: Trying to make unique motion for stitching sponge!
 (detect-wound)
 
 ;; Stitch
-(dotimes (i 5)
+(dotimes (i 6)
   ;; Make trajectory points. 
   (setq r (instance traj :init))
   (send r :rotate pi/2 :z)
@@ -335,10 +343,6 @@ GOAL: Trying to make unique motion for stitching sponge!
       (send ee :draw-on :flush t :size 100)
       (push (send *pr2* :larm :inverse-kinematics ee :rotation-axis t) path)
       (push tm time-vec)
-      ;;(send *pr2* :larm :inverse-kinematics ee :rotation-axis t)
-      ;;(send *ri* :angle-vector (send *pr2* :angle-vector) 500)
-      ;;(send *ri* :wait-interpolation)
-      ;;(send *irtviewer* :draw-objects)
       )
     )
   (pop time-vec)
@@ -366,12 +370,11 @@ GOAL: Trying to make unique motion for stitching sponge!
   ;; Draw the needle from the object. (対象物から針を抜き出)
   (if (= *is_first* 1)
       (progn (send *pr2* :rarm :move-end-pos (float-vector 0 0 (- 0 *remain*)) :local)
-	     (setq *remain* (- *remain* *diff_remain*)) ;; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-	     (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
-	     (send *irtviewer* :draw-objects)
-	     (send *ri* :angle-vector (send *pr2* :angle-vector) 5000)
+	     (send *ri* :angle-vector (send *pr2* :angle-vector) 6000)
 	     (send *ri* :wait-interpolation) 
-	     (send *irtviewer* :draw-objects))
+	     (send *irtviewer* :draw-objects)
+	     (setq *remain* (- *remain* *diff_remain*))
+	     )
     (progn
       (setq *drawing* nil)
       (setq remain_tmp (- *remain* *diff_remain*))
@@ -381,47 +384,31 @@ GOAL: Trying to make unique motion for stitching sponge!
       (send *ri* :wait-interpolation) 
       (send *irtviewer* :draw-objects)
       ;;(setq *remain* (- *remain* 60));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-      (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
+      (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)
       (if (> *remain*  remain_tmp)
-	  (while (not *drawing*)
-	    (is-draw)
-	    ;;(progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :rarm :end-coords :worldpos) (send *pr2* :rarm :end-coords :worldpos))))
-	    (ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-rforce)
-	    (send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
-	    (setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-	    (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
-	    (if (< *remain*  remain_tmp)
-		(setq *drawing* t)
+	  (progn
+	    (setq *right-drawing* nil)
+	    (ros::subscribe "/right_endeffector/wrench" geometry_msgs::WrenchStamped #'cb-rforce)
+	    (send *pr2* :rarm :move-end-pos (float-vector 0 0 (- remain_tmp)) :local)
+	    (send *ri* :angle-vector (send *pr2* :angle-vector) 30000)
+	    (send *irtviewer* :draw-objects) 
+	    (while (not *right-drawing*)
+	    ;;  (setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
+	      ;; (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
+	      (ros::duration-sleep 0.01)
+	      (ros::spin-once)
+	      (if (not (send *ri* :interpolatingp))
+		  (setq *right-drawing* t))
 	      )
-	    (format t "drawing: ~A ~%" *drawing*)
-	    (send *irtviewer* :draw-objects)
-	    (send *ri* :angle-vector (send *pr2* :angle-vector) 100)
-	    ;;(send *ri* :wait-interpolation) 
-	    (send *irtviewer* :draw-objects)
-	    
+	    (send *ri* :cancel-angle-vector :wait t)
+	    ;; (send *ri* :update-robot-state)
+	    ;; (setq diff (v- (send *pr2* :rarm :end-coords :worldpos) (send *ri* :robot :rarm :end-coords :worldpos)))
+	    ;; diff -> *remain*
 	    )
-	
-	
-	#|(while (= *draw_flag* 0)
-	(progn
-	(is-draw)
-	      ;(progn (send *ri* :state :potentio-vector)(print (v- (send *ri* :robot :rarm :end-coords :worldpos) (send *pr2* :rarm :end-coords :worldpos)))) ;
-	(send *pr2* :rarm :move-end-pos (float-vector 0 0 -5) :local)
-	(setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-	(format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)********************************************************************************************
-	(if (< *remain*  remain_tmp)
-	(setq *draw_flag* 1)
-	)
-	(format t "draw_flag: ~A ~%" *draw_flag*)
-	(send *irtviewer* :draw-objects)
-	(send *ri* :angle-vector (send *pr2* :angle-vector) 100)
-	(send *ri* :wait-interpolation) 
-	(send *irtviewer* :draw-objects)
-	)
-	)|#
 	)
       )
     )
+  
 
 
   ;; Move left hand to the delivery point.
@@ -460,12 +447,27 @@ GOAL: Trying to make unique motion for stitching sponge!
   (send *ri* :speak-jp "繰り返し，つぎの経路で縫います．注意してください．" :wait t)
   (unix:sleep 1)
   (send *pr2* :rarm :move-end-pos (float-vector 0 0 -50) :local)
-  (send *pr2* :larm :move-end-pos (float-vector 0 0 -100) :local)
-  (send *ri* :angle-vector (send *pr2* :angle-vector) 500)
-  (send *ri* :wait-interpolation) 
-  (send *irtviewer* :draw-objects)
-  
+  (send *ri* :wait-interpolation)
+  (ros::rate 10)
+  (setq *left-drawing* nil)
+  ;;余っている糸を左に引く作業を知的化した
+  (ros::subscribe "/left_endeffector/wrench" geometry_msgs::WrenchStamped #'cb-lforce)
+  (send *pr2* :larm :move-end-pos (float-vector 0 0 -200) :local)
+  (send *ri* :angle-vector (send *pr2* :angle-vector) 10000)
+  (while (null *left-drawing*)
+    (ros::duration-sleep 0.1)
+    (ros::spin-once)
+    (if (not (send *ri* :interpolatingp))
+	(setq *left-drawing* t))
+    )
+  (send *ri* :cancel-angle-vector :wait t)
   (setq *is_first* 0)
   )
 
-(send *ri* :speak-jp "縫合が終了しました．お疲れ様でした．" :wait t)
+
+(send *pr2* :reset-pose) ;;Set Initial Pose
+(send *ri* :stop-grasp :arms)
+(send *ri* :angle-vector (send *pr2* :angle-vector) 10000)
+(send *ri* :wait-interpolation)
+(send *irtviewer* :draw-objects)
+(send *ri* :speak-jp "縫合がおわりましたしました．お疲れ様でした．" :wait t)
