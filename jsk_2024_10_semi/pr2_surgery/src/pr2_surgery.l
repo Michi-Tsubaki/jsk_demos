@@ -2,14 +2,14 @@
 
 #| DESCRIPTION
 Okada-sensei seminar
-Surgery-method dev2
-Last editted Dec 14 by Michi-Tsubaki
+Surgery-method dev3
+Last editted Dec 19 by Michi-Tsubaki
 GOAL: Trying to make unique motion for stitching sponge!
 
 ## Functions
 - voice recognition (trriger)
 - perception (recognize wound)
-- stitch sponge 
+- sew sponge 
 
 ## For Future
 - Dual Pandaでやってみたい．
@@ -17,39 +17,45 @@ GOAL: Trying to make unique motion for stitching sponge!
 - そのために，class trajを継承して曲がった経路を生成する
 |#
 
-;;Global Param
-(setq *start-flag* 0)
-(setq *centerx* 700)
-(setq *centery* 0)
-(setq *centerz* 755)
-(setq *deskw* 500)
-(setq *needle_len* 70)
-(setq *interval* 10)
-(setq *traj_num* 10)
-(setq *traj_len* (* *interval* *traj_num*))
-(setq *draw_threshold* 0)
-(setq *draw_flag* 0)
-(setq *is_first* 1)
-(setq *drawing* nil)
-
-;; Set remain
-(setq *remain* 450) ;;how long remaining thread?
-(setq *diff_remain* 55)
-
-;; Offset
-(setq *rarm_offset* 2)
-
 ;;Load pkgs around PR2 Interface
 (require "package://pr2eus/pr2.l")
 (require "package://pr2eus/pr2-utils.l")
 (require "package://pr2eus/pr2-interface.l") ;;*ri*
 (require "package://pr2eus/speak.l") ;;pkg for speaking
-
 ;;ros msgs
 (ros::load-ros-package "jsk_recognition_msgs")
 (ros::roseus-add-msgs "speech_recognition_msgs")
 (ros::roseus-add-msgs "geometry_msgs")
 
+
+;;ここをかえるだけで調整できる！（外界の変化に合わせて）
+;; Drawing Pram
+(setq *draw-param-left* -0.3)
+(setq *draw-param-right* 0.15)
+;; Env Param
+(setq *centerx* 700)
+(setq *centery* 0)
+(setq *centerz* 755)
+(setq *deskw* 500)
+;; Hampen Param
+(setq *target-ypos* 0)
+(setq *target-xpos* 0)
+(setq *target-zpos* 30)
+;; Traj Param
+(setq *needle_len* 70)
+(setq *interval* 10)
+(setq *traj_num* 10)
+(setq *traj_len* (* *interval* *traj_num*))
+;; Set remain
+(setq *remain* 450) ;;how long remaining thread?
+(setq *diff_remain* 55)
+;; Offset
+(setq *rarm_offset* 2)
+
+
+;; Frag (DO NOT CHANGE)
+(setq *start-flag* 0)
+(setq *is_first* 1)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Environment ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Define set-environment method
@@ -128,20 +134,10 @@ GOAL: Trying to make unique motion for stitching sponge!
   (setq *target-ypos* *target-ypos-tmp*)
   )
 
-;; Drawing Detection
-(defun is-draw()
-  (setq diff (elt (print (v- (progn (send *ri* :update-robot-state) (send *ri* :robot :rarm :end-coords :worldpos)) (send *pr2* :rarm :end-coords :worldpos))) 1))
-  (format t "~A ~A ~%" diff *draw_threshold*)
-  (if (> diff *draw_threshold*)
-      (setq *draw_flag* 1)
-    (setq *draw_flag* 0)
-    )
-  )
-
 (defun cb-rforce(msg)
   (ros::ros-info "checking right-virtual-force")
   (setq *rforce* (send (send (send msg :wrench) :force) :z))
-  (if (> (send (send (send msg :wrench) :force) :z) 0.15)
+  (if (> (send (send (send msg :wrench) :force) :z) *draw-param-right*)
       (setq *right-drawing* t)
     )
   )
@@ -149,7 +145,7 @@ GOAL: Trying to make unique motion for stitching sponge!
 (defun cb-lforce(msg)
   (ros::ros-info "checking left-virtual-force")
   (setq *lforce* (send (send (send msg :wrench) :force) :z))
-  (if (< (send (send (send msg :wrench) :force) :z) -0.3)
+  (if (< (send (send (send msg :wrench) :force) :z) *draw-param-left*)
       (setq *left-drawing* t)
     )
   )
@@ -266,7 +262,7 @@ GOAL: Trying to make unique motion for stitching sponge!
   (send *ri* :stop-grasp)
   )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;main.l;;;;;
 ;;Set PR2
 (if (not (boundp '*pr2*)) (pr2-init)) 
@@ -300,9 +296,6 @@ GOAL: Trying to make unique motion for stitching sponge!
 
 ;; Perception
 ;; Perception (dummy)
-(setq *target-ypos* 0)
-(setq *target-xpos* 0)
-(setq *target-zpos* 30)
 (ros::subscribe "/recognize_wound/cluster_decomposer/boxes" jsk_recognition_msgs::BoundingBoxArray #'cb-recog)
 (if (send *ri* :simulation-modep)
     (setq *target-ypos-tmp* 0)
@@ -376,7 +369,6 @@ GOAL: Trying to make unique motion for stitching sponge!
 	     (setq *remain* (- *remain* *diff_remain*))
 	     )
     (progn
-      (setq *drawing* nil)
       (setq remain_tmp (- *remain* *diff_remain*))
       (send *pr2* :rarm :move-end-pos (float-vector 0 0 -60) :local)
       (send *irtviewer* :draw-objects)
@@ -390,8 +382,7 @@ GOAL: Trying to make unique motion for stitching sponge!
 	    (setq *right-drawing* nil)
 	    (ros::subscribe "/right_endeffector/wrench" geometry_msgs::WrenchStamped #'cb-rforce 1)
 	    (send *pr2* :rarm :move-end-pos (float-vector 0 0 (- remain_tmp)) :local)
-	    ;;(send *ri* :angle-vector (print (send *pr2* :angle-vector)) 10000)
-	    
+	    ;;(send *ri* :angle-vector (print (send *pr2* :angle-vector)) 10000) ;;bug
 	    (send *ri* :angle-vector-sequence (list (send *pr2* :angle-vector)) (list 10000)
 		  :default-controller 0.001
 		  :min-time 0.0001
@@ -400,19 +391,14 @@ GOAL: Trying to make unique motion for stitching sponge!
 	    (send *irtviewer* :draw-objects)
 	    (ros::duration-sleep 1.5)
 	    (while (null *right-drawing*)
-	    ;;  (setq *remain* (- *remain* 5));; オリジナリティポイント: 1回縫うと針を引ける量が減るのを再現
-	      ;; (format t "remaining ~A ~%" *remain*) ;; for debug! (*remain*が0になったらbreakするようにしたい)
 	      (ros::duration-sleep 0.05)
 	      (ros::spin-once)
 	      (if (not (send *ri* :interpolatingp))
 		  (setq *right-drawing* t))
 	      )
-	    ;;(send *ri* :cancel-angle-vector :wait t)
-	    (send *ri* :stop-motion)
+	    (send *ri* :cancel-angle-vector :wait t)
+	    ;;(send *ri* :stop-motion)
 	    (send *pr2* :angle-vector (send *ri* :state :potentio-vector))
-	    ;; (send *ri* :update-robot-state)
-	    ;; (setq diff (v- (send *pr2* :rarm :end-coords :worldpos) (send *ri* :robot :rarm :end-coords :worldpos)))
-	    ;; diff -> *remain*
 	    )
 	)
       )
@@ -472,10 +458,10 @@ GOAL: Trying to make unique motion for stitching sponge!
   (setq *is_first* 0)
   )
 
-
 (send *pr2* :reset-pose) ;;Set Initial Pose
 (send *ri* :stop-grasp :arms)
 (send *ri* :angle-vector (send *pr2* :angle-vector) 10000)
 (send *ri* :wait-interpolation)
 (send *irtviewer* :draw-objects)
+
 (send *ri* :speak-jp "縫合がおわりしました．お疲れ様でした．" :wait t)
