@@ -118,10 +118,10 @@
             <rosparam>
               use_indices: false
               keep_organized: true
-              h_limit_max: 11
-              h_limit_min: -8
+              h_limit_max: 10
+              h_limit_min: -10
               s_limit_max: 255
-              s_limit_min: 104
+              s_limit_min: 35
               i_limit_max: 255
               i_limit_min: 0
             </rosparam>
